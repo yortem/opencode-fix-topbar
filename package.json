@@ -1,7 +1,14 @@
 {
-  "name": "rtl-titlebar-fix",
+  "name": "opencode-fix-topbar",
   "version": "0.1.0",
   "private": true,
+  "description": "Fixes overlapping window buttons in OpenCode Desktop on right-to-left Windows.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yortem/opencode-fix-topbar.git"
+  },
+  "homepage": "https://github.com/yortem/opencode-fix-topbar#readme",
   "type": "module",
   "exports": {
     "./gui-experimental": "./dist/gui-experimental.cjs"

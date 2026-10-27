@@ -1,6 +1,11 @@
-# rtl-titlebar-fix
+# opencode-fix-topbar
 
 Fixes overlapping window buttons in OpenCode Desktop on right-to-left Windows.
+
+| Before | After |
+| --- | --- |
+| ![Before](before.jpg) | ![After](after.jpg) |
+| The close button covers the menu | The menu is clear and clickable |
 
 ## The problem
 
@@ -25,7 +30,7 @@ header[data-slot="titlebar-v2"] {
 
    ```jsonc
    {
-     "plugins": ["C:/path/to/rtl-titlebar-fix"]
+     "plugins": ["C:/path/to/opencode-fix-topbar"]
    }
    ```
 
@@ -48,11 +53,15 @@ Force the offset in `opencode.jsonc`:
 ```jsonc
 {
   "plugins": [
-    { "package": "C:/path/to/rtl-titlebar-fix", "options": { "inset": 138 } }
+    { "package": "C:/path/to/opencode-fix-topbar", "options": { "inset": 138 } }
   ]
 }
 ```
 
 Set `"inset": 0` to turn the fix off.
 
-Windows only. macOS already handles its own window buttons.
+## Notes
+
+- Windows only. macOS already handles its own window buttons.
+- Unofficial plugin. Not affiliated with or endorsed by OpenCode.
+- MIT licensed.
