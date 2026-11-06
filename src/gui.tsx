@@ -3,6 +3,137 @@ import { Plugin, Style } from "@opencode/plugin/gui"
 /** Locales whose text runs right to left, as Chromium orders a window's views. */
 const RTL_LANGUAGES = new Set(["ar", "ckb", "dv", "fa", "he", "ku", "ps", "sd", "ug", "ur", "yi"])
 
+/** The Markdown renderer's root, in chat messages and in the file preview. */
+const MARKDOWN = '[data-component="markdown"]'
+
+/** Parts of Markdown whose text is code or a diagram, so it must not choose the document's direction. */
+const MARKDOWN_CODE = "pre, code, [data-component='markdown-code'], [data-component='markdown-mermaid']"
+
+/** Right-to-left letters, by Unicode block: Hebrew, Arabic, Syriac, Thaana, NKo, Samaritan, Mandaic. */
+function isRtlLetter(code: number) {
+  return (
+    (code >= 0x0590 && code <= 0x05ff) || // Hebrew
+    (code >= 0x0600 && code <= 0x06ff) || // Arabic
+    (code >= 0x0700 && code <= 0x074f) || // Syriac
+    (code >= 0x0750 && code <= 0x077f) || // Arabic Supplement
+    (code >= 0x0780 && code <= 0x07bf) || // Thaana
+    (code >= 0x07c0 && code <= 0x07ff) || // NKo
+    (code >= 0x0800 && code <= 0x083f) || // Samaritan
+    (code >= 0x0840 && code <= 0x085f) || // Mandaic
+    (code >= 0x0860 && code <= 0x086f) || // Syriac Supplement
+    (code >= 0x0870 && code <= 0x089f) || // Arabic Extended-B
+    (code >= 0x08a0 && code <= 0x08ff) || // Arabic Extended-A
+    (code >= 0xfb1d && code <= 0xfb4f) || // Hebrew presentation forms
+    (code >= 0xfb50 && code <= 0xfdff) || // Arabic presentation forms A
+    (code >= 0xfe70 && code <= 0xfeff) // Arabic presentation forms B
+  )
+}
+
+/** Left-to-right letters, so a Hebrew document with English terms still counts as Hebrew. */
+function isLtrLetter(code: number) {
+  return (
+    (code >= 0x0041 && code <= 0x005a) || // A-Z
+    (code >= 0x0061 && code <= 0x007a) || // a-z
+    (code >= 0x00c0 && code <= 0x02af) || // Latin-1 Supplement, Extended-A/B, IPA
+    (code >= 0x0370 && code <= 0x058f) || // Greek, Cyrillic, Armenian
+    (code >= 0x1e00 && code <= 0x1eff) // Latin Extended Additional
+  )
+}
+
+/**
+ * The app renders Markdown with `dir="auto"`, which takes the direction from the first strong
+ * character. A Hebrew document that opens with a Latin name, such as `AGENTS.md` or
+ * `seo-helper - הנחיות עבודה`, therefore lays out left to right: its headings, paragraphs and
+ * list markers all sit on the wrong side.
+ *
+ * Choose the direction of the whole document from most of its text, ignoring code and diagrams,
+ * so a Hebrew document stays right to left even when its first word is English.
+ */
+function markdownDirection(root: HTMLElement) {
+  let rtl = 0
+  let ltr = 0
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const parent = node.parentElement
+
+    if (!parent || parent.closest(MARKDOWN_CODE)) continue
+
+    for (const char of node.nodeValue ?? "") {
+      const code = char.codePointAt(0)!
+
+      if (isRtlLetter(code)) rtl++
+      else if (isLtrLetter(code)) ltr++
+    }
+
+    // A sample is enough to tell a Hebrew document from an English one.
+    if (rtl + ltr >= 4000) break
+  }
+
+  return rtl > ltr ? "rtl" : "ltr"
+}
+
+/** Sets each Markdown root's direction as its content arrives, and keeps it in step while it streams. */
+function fixMarkdownDirection() {
+  if (typeof document === "undefined" || !document.documentElement) return
+
+  const pending = new Set<HTMLElement>()
+  let frame = 0
+
+  const apply = (root: HTMLElement) => {
+    if (!root.isConnected) return
+
+    const direction = markdownDirection(root)
+
+    if (root.getAttribute("dir") !== direction) root.setAttribute("dir", direction)
+  }
+
+  const schedule = (root: HTMLElement) => {
+    pending.add(root)
+    frame ||= requestAnimationFrame(() => {
+      frame = 0
+      for (const root of pending) apply(root)
+      pending.clear()
+    })
+  }
+
+  const closest = (node: Node | null) => {
+    const element = node instanceof Element ? node : node?.parentElement
+
+    return (element?.closest(MARKDOWN) as HTMLElement | null) ?? null
+  }
+
+  const scan = (node: Node) => {
+    if (!(node instanceof Element)) return
+
+    if (node.matches(MARKDOWN)) schedule(node as HTMLElement)
+    node.querySelectorAll(MARKDOWN).forEach((element) => schedule(element as HTMLElement))
+  }
+
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      const root = closest(record.target)
+
+      if (root) schedule(root)
+
+      for (const node of record.addedNodes) {
+        const added = closest(node)
+
+        if (added) schedule(added)
+        else scan(node)
+      }
+    }
+  })
+
+  observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true })
+  document.querySelectorAll(MARKDOWN).forEach((element) => schedule(element as HTMLElement))
+
+  return () => {
+    observer.disconnect()
+    if (frame) cancelAnimationFrame(frame)
+  }
+}
+
 type Bounds = { x: number; y: number; width: number; height: number }
 
 /**
@@ -117,6 +248,22 @@ export default Plugin.define({
   margin-left: ${inset} !important;
 }`,
     )
+
+    // `options.markdownDirection: false` leaves Markdown's own `dir="auto"` alone.
+    if (ctx.options.markdownDirection === false) return
+
+    ctx.add(
+      Style,
+      `[data-component="markdown"] {
+  text-align: start;
+}
+
+[data-component="markdown"] :is(pre, [data-component="markdown-code"]) {
+  text-align: left;
+}`,
+    )
+
+    return fixMarkdownDirection()
   },
   main(ctx) {
     mirrorEmbedBounds(ctx)

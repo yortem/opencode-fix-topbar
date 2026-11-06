@@ -2,7 +2,7 @@
   "name": "opencode-fix-topbar",
   "version": "0.1.0",
   "private": true,
-  "description": "Fixes overlapping window buttons in OpenCode Desktop on right-to-left Windows.",
+  "description": "Fixes right-to-left layout problems in OpenCode Desktop on Windows.",
   "license": "MIT",
   "repository": {
     "type": "git",
